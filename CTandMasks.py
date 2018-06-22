@@ -165,12 +165,12 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # todo Esto deberia ir dentro de un loop que recorra todas las TAC, en vez de una sola (inputImgPath)
-    inputImgPath = '1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
-    imageAtlasPath = 'Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
-    maskAtlasPath = 'Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
+    inputImgPath = '../1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
+    imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
+    maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt' # Mapa de parametros a usar en la registracion
 
-    savePath = '1111' # Carpeta donde se guarda la salida
+    savePath = '../1111' # Carpeta donde se guarda la salida
 
     # Inicializar y cargar
     imgs = CTandMasks()
