@@ -17,10 +17,10 @@ La idea es generar una segmentación para una imagen TAC a partir de otra segmen
 """
 
 
-inputImgPath = '1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
-imageAtlasPath = 'Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
-maskAtlasPath = 'Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
-paramPath = 'Par0000affine.txt'
+inputImgPath = '../1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
+imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
+maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
+paramPath = '../Par0000affine.txt'
 
 movingImage = sitk.ReadImage(inputImgPath)
 mask = sitk.ReadImage(maskAtlasPath)
