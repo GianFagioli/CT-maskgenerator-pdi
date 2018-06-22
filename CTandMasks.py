@@ -96,6 +96,10 @@ class CTandMasks:
             # Sobreescribo la imagen de entrada con la registrada
             self.inputct = elastixImageFilter.GetResultImage()
 
+    def erodeInitialMask(self):
+        for i in xrange(2):
+            self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
+        #sitk.Show(movingImage)
 
     def segLevelSets(self):
         # Level sets method segmentation
@@ -134,6 +138,17 @@ class CTandMasks:
         self.MaskArray.append([imgg, 'lvlSet'])
 
 
+    def segConfConnected(self):
+        seg_implicit_thresholds = sitk.ConfidenceConnected(img_T1, seedList=initial_seed_point_indexes,
+                                                           numberOfIterations=0,
+                                                           multiplier=2,
+                                                           initialNeighborhoodRadius=1,
+                                                           replaceValue=1)
+
+        gui.MultiImageDisplay(image_list=[sitk.LabelOverlay(img_T1_255, seg_implicit_thresholds)],
+                              title_list=['confidence connected result'])
+
+
     def locateGroundTruth(self):
         nameGT = self.fName.replace("_image.nii.gz", "_head_mask.nii.gz")
         self.maskGT = sitk.ReadImage(nameGT)
@@ -165,10 +180,10 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # todo Esto deberia ir dentro de un loop que recorra todas las TAC, en vez de una sola (inputImgPath)
-    inputImgPath = '1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
-    imageAtlasPath = 'Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
-    maskAtlasPath = 'Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
-    paramPath = 'Par0000affine.txt' # Mapa de parametros a usar en la registracion
+    inputImgPath = '../1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
+    imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
+    maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
+    paramPath = '../Par0000affine.txt' # Mapa de parametros a usar en la registracion
 
     savePath = '1111' # Carpeta donde se guarda la salida
 
@@ -179,8 +194,14 @@ if __name__ == "__main__":
     # Registrar la imagen de entrada
     imgs.register()
 
+    # Erosionar mascara
+    imgs.erodeInitialMask()
+
     # Obtener la segmentacion por level sets
     imgs.segLevelSets()
+
+    # Obtener la segmentacion por crecimiento de regiones
+    imgs.segConfConnected()
 
     # Cargar el Ground Truth a partir del nombre de la imagen de entrada
     imgs.locateGroundTruth()
