@@ -98,7 +98,7 @@ class CTandMasks:
 
 
     def erodeInitialMask(self):
-        for i in xrange(2):
+        for i in xrange(4):
             self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
         #sitk.Show(movingImage)
 
@@ -130,7 +130,6 @@ class CTandMasks:
 
         # En vez de movingImagef uso gm
         gm = sitk.GradientMagnitude(self.inputct)
-        sitk.Show(gm > 160)
 
         # El primer parametro es el volumen que crece, el segundo
         imgg = gac.Execute(sitk.Cast(self.MaskArray[0][0], sitk.sitkFloat32), gm)
@@ -146,14 +145,27 @@ class CTandMasks:
 
 
     def segConfConnected(self):
-        seg_implicit_thresholds = sitk.ConfidenceConnected(img_T1, seedList=initial_seed_point_indexes,
+        coordsMask = np.where(sitk.GetArrayFromImage(self.MaskArray[0][0]))
+        coordsMask = zip(coordsMask[0], coordsMask[1], coordsMask[2])
+
+        #seg_explicit_thresholds = sitk.ConnectedThreshold(self.inputct, seedList=coordsMask, lower=100,
+        #                                                  upper=170)
+        #self.MaskArray.append([seg_explicit_thresholds, 'ConfConnected'])
+
+        seg_implicit_thresholds = sitk.ConfidenceConnected(self.inputct, seedList=[coordsMask[500]],
                                                            numberOfIterations=0,
                                                            multiplier=2,
                                                            initialNeighborhoodRadius=1,
                                                            replaceValue=1)
+        self.MaskArray.append([seg_implicit_thresholds, 'ConfConnected'])
 
-        gui.MultiImageDisplay(image_list=[sitk.LabelOverlay(img_T1_255, seg_implicit_thresholds)],
-                              title_list=['confidence connected result'])
+        #seg_implicit_threshold_vector = sitk.VectorConfidenceConnected(self.inputct,
+        #                                                               coordsMask[1],
+        #                                                               numberOfIterations=2,
+        #                                                               multiplier=4)
+        #self.MaskArray.append([seg_implicit_threshold_vector, 'ConfConnected'])
+
+
 
 
     def locateGroundTruth(self):
@@ -208,7 +220,7 @@ if __name__ == "__main__":
     imgs.segLevelSets()
 
     # Obtener la segmentacion por crecimiento de regiones
-    # imgs.segConfConnected()
+    imgs.segConfConnected()
 
     # Cargar el Ground Truth a partir del nombre de la imagen de entrada
     imgs.locateGroundTruth()
