@@ -97,6 +97,12 @@ class CTandMasks:
             self.inputct = elastixImageFilter.GetResultImage()
 
 
+    def erodeInitialMask(self):
+        for i in xrange(2):
+            self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
+        #sitk.Show(movingImage)
+
+
     def segLevelSets(self):
         # Level sets method segmentation
 
@@ -114,15 +120,20 @@ class CTandMasks:
         gac = sitk.GeodesicActiveContourLevelSetImageFilter()
         gac.SetPropagationScaling(1.0)
         gac.SetCurvatureScaling(0.2)
+        # gac.SetCurvatureScaling(20)
         # gac.SetCurvatureScaling(4)
         gac.SetAdvectionScaling(3.0)
         gac.SetMaximumRMSError(0.01)
-        gac.SetNumberOfIterations(200)
+        gac.SetNumberOfIterations(2)
 
         movingImagef = sitk.Cast(self.inputct, sitk.sitkFloat32) * -1 + 0.5
 
+        # En vez de movingImagef uso gm
+        gm = sitk.GradientMagnitude(self.inputct)
+        sitk.Show(gm > 160)
+
         # El primer parametro es el volumen que crece, el segundo
-        imgg = gac.Execute(sitk.Cast(self.MaskArray[0][0], sitk.sitkFloat32), movingImagef)
+        imgg = gac.Execute(sitk.Cast(self.MaskArray[0][0], sitk.sitkFloat32), gm)
         # sitk.Show(imgg)
 
         # Umbralizo con el valor mas bajo
@@ -179,7 +190,7 @@ if __name__ == "__main__":
     inputImgPath = '../1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
-    paramPath = '../Par0000affine.txt' # Mapa de parametros a usar en la registracion
+    paramPath = 'Par0000affine.txt' # Mapa de parametros a usar en la registracion
 
     savePath = '1111' # Carpeta donde se guarda la salida
 
@@ -197,7 +208,7 @@ if __name__ == "__main__":
     imgs.segLevelSets()
 
     # Obtener la segmentacion por crecimiento de regiones
-    imgs.segConfConnected()
+    # imgs.segConfConnected()
 
     # Cargar el Ground Truth a partir del nombre de la imagen de entrada
     imgs.locateGroundTruth()
@@ -206,7 +217,6 @@ if __name__ == "__main__":
     imgs.compareWithGT()
 
     # todo agregar boxplot, estudiar graficos para comparar
-    # probando
 
     # Guardar los archivos en la carpeta establecida
     imgs.saveFiles(savePath)
