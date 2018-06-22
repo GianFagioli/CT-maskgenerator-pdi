@@ -206,6 +206,7 @@ if __name__ == "__main__":
     imgs.compareWithGT()
 
     # todo agregar boxplot, estudiar graficos para comparar
+    # probando
 
     # Guardar los archivos en la carpeta establecida
     imgs.saveFiles(savePath)
