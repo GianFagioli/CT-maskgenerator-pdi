@@ -31,7 +31,7 @@ class CTandMasks:
         self.savePath = ""
 
 
-    def open(self, inputImgPath, imageAtlasPath, maskAtlasPath, paramPath):
+    def open(self, inputImgPath, imageAtlasPath, paramPath, maskAtlasPath=None):
         """
             Loads an image.
         """
@@ -41,9 +41,10 @@ class CTandMasks:
 
         # MaskArray: Lista que contiene listas, compuestas por una máscara como primer atributo, y el nombre archivo
         # como segundo atributo.
-        self.MaskArray.append([sitk.ReadImage(maskAtlasPath), 'atlasMask'])  # La primera máscara será la del atlas
-        self.paramMap = sitk.ReadParameterFile(paramPath)
+        if maskAtlasPath is not None:
+            self.MaskArray.append([sitk.ReadImage(maskAtlasPath), 'atlasMask'])  # La primera máscara será la del atlas
 
+        self.paramMap = sitk.ReadParameterFile(paramPath)
 
     def saveFiles(self, savePath):
         """
@@ -71,30 +72,65 @@ class CTandMasks:
         return savedImg
 
 
-    def register(self, registerGT = False):
+    def register(self, registerGT = False, savePath=None, saveGT=False):
         # Register input CT scan to the atlas, getting the atlas (isotropic) dimensions in the input image
         elastixImageFilter = sitk.ElastixImageFilter()
 
         elastixImageFilter.LogToConsoleOn()
         elastixImageFilter.LogToFileOff()
 
-        # Depende si es una mascara o una imagen normal registro diferente
-        if registerGT:  # Si es una mascara
-            elastixImageFilter.SetFixedImage(self.MaskArray[0][0])
-            elastixImageFilter.SetMovingImage(self.maskGT)
-            self.paramMap["ResampleInterpolator"] = ["FinalNearestNeighborInterpolator"]
-        else:
-            elastixImageFilter.SetFixedImage(self.atlasct)
-            elastixImageFilter.SetMovingImage(self.inputct)
-            self.paramMap["ResampleInterpolator"] = ["FinalBSplineInterpolator"]
+        elastixImageFilter.SetFixedImage(self.atlasct)
+        elastixImageFilter.SetMovingImage(self.inputct)
+        self.paramMap["ResampleInterpolator"] = ["FinalBSplineInterpolator"]
+
         elastixImageFilter.SetParameterMap(self.paramMap)
         elastixImageFilter.Execute()
 
-        if registerGT:
-            self.maskGT = elastixImageFilter.GetResultImage()
-        else:
-            # Sobreescribo la imagen de entrada con la registrada
-            self.inputct = elastixImageFilter.GetResultImage()
+        registeredImage = elastixImageFilter.GetResultImage()
+        self.inputct = registeredImage
+
+        # Save parameter map
+        outTPM = elastixImageFilter.GetTransformParameterMap(0)
+
+        if savePath is not None:
+            folder = os.path.join(self.fName.replace(os.path.split(self.fName)[-1],''),savePath)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            filename = os.path.join(folder, os.path.split(self.fName)[-1])
+            sitk.WriteImage(registeredImage, filename)
+
+            outParamFile = os.path.join(filename + "_reg.txt")
+            elastixImageFilter.WriteParameterFile(outTPM, outParamFile)
+
+            # Depende si es una mascara o una imagen normal registro diferente
+            if registerGT:  # Si es una mascara
+                # Get the Transform parameters file from mask filename
+                pathImg, filenameImg = os.path.split(self.fName)
+
+                # Make the route to the parameter file PREVIOUSLY created (if I'm running this on a mask)
+                folder = os.path.join(self.fName.replace(os.path.split(self.fName)[-1], ''), savePath)
+                filename = os.path.join(folder, os.path.split(self.fName)[-1])
+
+                paramFilename = os.path.join(filename + "_reg.txt")
+
+                paramFile = os.path.join(self.savePath, paramFilename)
+
+                # Make sure that the parameter map exists
+                try:
+                    currentTransform = sitk.ReadParameterFile(paramFile)
+                except:
+                    print paramFile + " not found. Did you run register on " + filenameImg + "?"
+                    return False
+
+                # Switch to Nearest Neighbor
+                currentTransform["ResampleInterpolator"] = ["FinalNearestNeighborInterpolator"]
+
+                # Apply transformation to mask
+                registeredMask = sitk.Transformix(self.maskGT, currentTransform)
+                self.maskGT = registeredMask
+
+            if saveGT:
+                sitk.WriteImage(registeredMask, filename.replace("image","head_mask"))
 
 
     def erodeInitialMask(self):
@@ -171,8 +207,6 @@ class CTandMasks:
     def locateGroundTruth(self):
         nameGT = self.fName.replace("_image.nii.gz", "_head_mask.nii.gz")
         self.maskGT = sitk.ReadImage(nameGT)
-        self.register(registerGT=True)
-
 
     def compareWithGT(self):
         img1 = sitk.GetArrayFromImage(self.maskGT)
@@ -195,23 +229,20 @@ class CTandMasks:
         print "Relative absolute volume difference: ", metric.binary.ravd(img1, img2)
 
 
-if __name__ == "__main__":
+def mainRegistrado():
     start_time = time.time()
 
     # todo Esto deberia ir dentro de un loop que recorra todas las TAC, en vez de una sola (inputImgPath)
-    inputImgPath = '../1111/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
+    inputImgPath = '../1111/reg/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
-    paramPath = 'Par0000affine.txt' # Mapa de parametros a usar en la registracion
+    paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
 
-    savePath = '1111' # Carpeta donde se guarda la salida
+    savePath = '../1111/seg'  # Carpeta donde se guarda la salida
 
     # Inicializar y cargar
     imgs = CTandMasks()
-    imgs.open(inputImgPath, imageAtlasPath, maskAtlasPath, paramPath)
-
-    # Registrar la imagen de entrada
-    imgs.register()
+    imgs.open(inputImgPath, imageAtlasPath, paramPath, maskAtlasPath)
 
     # Erosionar mascara
     imgs.erodeInitialMask()
@@ -234,3 +265,34 @@ if __name__ == "__main__":
     imgs.saveFiles(savePath)
 
     print "Elapsed time was " + str(int(time.time() - start_time)) + " seconds."
+
+
+def registerImgs(inputImgPath=None, savePath=''):
+    if inputImgPath is None:
+        print "Input folder not specified!"
+        return
+    print "Output folder: ", savePath
+
+    imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
+    paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
+    maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
+
+
+    for root, dirs, files in os.walk(inputImgPath):
+        for name in files:
+            if "image" in name:  # Only process CT files, not masks.
+                filepath = os.path.join(root, name)
+                print "File name: ", filepath, '\n'
+
+                imgs = CTandMasks()
+                imgs.open(filepath, imageAtlasPath, paramPath, maskAtlasPath)
+
+                imgs.locateGroundTruth()
+                imgs.register(registerGT=True, savePath=savePath, saveGT=True)
+
+
+if __name__ == "__main__":
+    # Registrar todas las imagenes de la carpeta 1111 y guardarlas dentro de reg
+    # registerImgs(inputImgPath='../1111', savePath='reg')
+
+    mainRegistrado()
