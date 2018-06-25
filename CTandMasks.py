@@ -138,8 +138,15 @@ class CTandMasks:
 
 
     def erodeInitialMask(self):
+        filter = sitk.BinaryErodeImageFilter()
+        filter.SetKernelRadius(5)
+        filter.SetForegroundValue(1)
+
+
+
         for i in xrange(8):
-            self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
+            #self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
+            self.MaskArray[0][0] = filter.Execute(self.MaskArray[0][0])
         #sitk.Show(movingImage)
 
 
@@ -209,16 +216,35 @@ class CTandMasks:
         coordsMask = np.where(sitk.GetArrayFromImage(self.MaskArray[0][0]))
         coordsMask = zip(coordsMask[0], coordsMask[1], coordsMask[2])
 
-        #seg_explicit_thresholds = sitk.ConnectedThreshold(self.inputct, seedList=coordsMask, lower=100,
+        #seg_explicit_thresholds = sitk.ConnectedThreshold(self.inputct, seedList=[coordsMask[100]], lower=100,
         #                                                  upper=170)
         #self.MaskArray.append([seg_explicit_thresholds, 'ConfConnected'])
 
-        seg_implicit_thresholds = sitk.ConfidenceConnected(self.inputct, seedList=[coordsMask[500]],
-                                                           numberOfIterations=0,
-                                                           multiplier=2,
-                                                           initialNeighborhoodRadius=1,
+
+        seed = [(144, 114,84), (102,159, 89), (98, 116, 131), (98, 116, 68)]
+
+        gm = self.headContours()
+
+        seg_implicit_thresholds = sitk.ConfidenceConnected(self.inputct, seedList=coordsMask,
+                                                           numberOfIterations=5,
+                                                           multiplier=2.5,
+                                                           initialNeighborhoodRadius=10,
                                                            replaceValue=1)
+
+        vectorRadius = (1, 1, 1)
+        kernel = sitk.sitkBall
+        seg_implicit_thresholds = sitk.BinaryMorphologicalOpening(seg_implicit_thresholds, vectorRadius, kernel)
+
+        seg_implicit_thresholds = f.retainLargestConnectedComponent(seg_implicit_thresholds)
+
+        for i in range(10):
+            seg_implicit_thresholds = sitk.BinaryMorphologicalClosing(seg_implicit_thresholds, 3)
+
+
+
         self.MaskArray.append([seg_implicit_thresholds, 'ConfConnected'])
+
+
 
         #seg_implicit_threshold_vector = sitk.VectorConfidenceConnected(self.inputct,
         #                                                               coordsMask[1],
@@ -276,7 +302,7 @@ def mainRegistrado():
     imgs.segLevelSets()
 
     # Obtener la segmentacion por crecimiento de regiones
-    # imgs.segConfConnected()
+    imgs.segConfConnected()
 
     # Cargar el Ground Truth a partir del nombre de la imagen de entrada
     imgs.locateGroundTruth()
@@ -318,6 +344,6 @@ def registerImgs(inputImgPath=None, savePath=''):
 
 if __name__ == "__main__":
     # Registrar todas las imagenes de la carpeta 1111 y guardarlas dentro de reg
-    # registerImgs(inputImgPath='../1111', savePath='reg')
+    #registerImgs(inputImgPath='../1111', savePath='reg')
 
     mainRegistrado()
