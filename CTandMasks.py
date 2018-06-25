@@ -60,6 +60,10 @@ class CTandMasks:
         # Write registered ct image
         sitk.WriteImage(self.inputct, savedImg)
 
+        # Write registered ground truth
+        if self.maskGT is not None:
+            sitk.WriteImage(self.maskGT, os.path.join(savePath, 'regGT' + filenameImg))
+
         # Write generated masks
         for i, mask in enumerate(self.MaskArray):
             maskName = self.MaskArray[i][1]
@@ -134,9 +138,34 @@ class CTandMasks:
 
 
     def erodeInitialMask(self):
-        for i in xrange(4):
+        for i in xrange(8):
             self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
         #sitk.Show(movingImage)
+
+
+    def headContours(self):
+        timeStep_, conduct, numIter = (0.04, 9.0, 5)
+        imgRecast = sitk.Cast(self.inputct, sitk.sitkFloat32)
+        curvDiff = sitk.CurvatureAnisotropicDiffusionImageFilter()
+        curvDiff.SetTimeStep(timeStep_)
+        curvDiff.SetConductanceParameter(conduct)
+        curvDiff.SetNumberOfIterations(numIter)
+        imgFilter = curvDiff.Execute(imgRecast)
+
+        sigma_ = 2.0
+        imgGauss = sitk.GradientMagnitudeRecursiveGaussian(image1=imgFilter, sigma=sigma_)
+        K1, K2 = 18.0, 8.0
+        alpha_ = (K2 - K1) / 6
+        beta_ = (K1 + K2) / 2
+
+        sigFilt = sitk.SigmoidImageFilter()
+        sigFilt.SetAlpha(alpha_)
+        sigFilt.SetBeta(beta_)
+        sigFilt.SetOutputMaximum(1.0)
+        sigFilt.SetOutputMinimum(0.0)
+        imgSigmoid = sigFilt.Execute(imgGauss)
+
+        return imgSigmoid
 
 
     def segLevelSets(self):
@@ -153,29 +182,25 @@ class CTandMasks:
         # of an edge potential map is that it has values close to zero in regions near the edges and values close to one
         # inside the shape itself. Typically, the edge potential map is compute from the image gradient.
 
-        gac = sitk.GeodesicActiveContourLevelSetImageFilter()
-        gac.SetPropagationScaling(1.0)
-        gac.SetCurvatureScaling(0.2)
-        # gac.SetCurvatureScaling(20)
-        # gac.SetCurvatureScaling(4)
-        gac.SetAdvectionScaling(3.0)
-        gac.SetMaximumRMSError(0.01)
-        gac.SetNumberOfIterations(2)
+        # La primer entrada, osea la semilla  debe estar invertida, es decir, el fondo debe ser blanco y la semilla negra
 
-        movingImagef = sitk.Cast(self.inputct, sitk.sitkFloat32) * -1 + 0.5
+        gac = sitk.GeodesicActiveContourLevelSetImageFilter()
+        gac.SetPropagationScaling(1)
+        gac.SetCurvatureScaling(1)
+        gac.SetAdvectionScaling(1)
+        gac.SetMaximumRMSError(0.02)
+        gac.SetNumberOfIterations(800)
+
+        seed = self.MaskArray[0][0]
+        seed = sitk.Cast(seed, sitk.sitkFloat32) * -1 + 0.5
 
         # En vez de movingImagef uso gm
-        gm = sitk.GradientMagnitude(self.inputct)
+        gm = self.headContours()
 
         # El primer parametro es el volumen que crece, el segundo
-        imgg = gac.Execute(sitk.Cast(self.MaskArray[0][0], sitk.sitkFloat32), gm)
-        # sitk.Show(imgg)
+        imgg = gac.Execute(seed, sitk.Cast(gm, sitk.sitkFloat32))
 
-        # Umbralizo con el valor mas bajo
-        imgg > sitk.GetArrayFromImage(imgg).min()
-
-        imgg = imgg - sitk.GetArrayFromImage(imgg).min()
-        imgg = imgg > 0
+        imgg = imgg < 0
 
         self.MaskArray.append([imgg, 'lvlSet'])
 
@@ -233,7 +258,7 @@ def mainRegistrado():
     start_time = time.time()
 
     # todo Esto deberia ir dentro de un loop que recorra todas las TAC, en vez de una sola (inputImgPath)
-    inputImgPath = '../1111/reg/1111_16216_image.nii.gz'  # Imagen que vamos a procesar
+    inputImgPath = '../1111/reg/1111_22216_image.nii.gz'  # Imagen que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
@@ -251,7 +276,7 @@ def mainRegistrado():
     imgs.segLevelSets()
 
     # Obtener la segmentacion por crecimiento de regiones
-    imgs.segConfConnected()
+    # imgs.segConfConnected()
 
     # Cargar el Ground Truth a partir del nombre de la imagen de entrada
     imgs.locateGroundTruth()
