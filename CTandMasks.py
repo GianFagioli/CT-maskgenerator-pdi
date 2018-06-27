@@ -35,6 +35,11 @@ class CTandMasks:
         """
             Loads an image.
         """
+        print "Abriendo archivos: "
+        print "   TAC de entrada: ", inputImgPath
+        print "   Atlas TAC: ", imageAtlasPath
+        print "   Parametros de la registracion: ", paramPath
+
         self.inputct = sitk.ReadImage(inputImgPath)
         self.fName = inputImgPath # Store the img name for saving later
         self.atlasct = sitk.ReadImage(imageAtlasPath)
@@ -51,6 +56,7 @@ class CTandMasks:
         Guardar la imagen de entrada registrada y todas las mascaras generadas (incluso el atlas solamente registrado)
         en la carpeta de salida.
         """
+        print "Guardando archivos..."
         if not os.path.exists(savePath):
             os.makedirs(savePath)
 
@@ -59,10 +65,13 @@ class CTandMasks:
         savedImg = os.path.join(savePath, 'regCT' + filenameImg)
         # Write registered ct image
         sitk.WriteImage(self.inputct, savedImg)
+        print "   Imagen de entrada registrada: ", savedImg
 
         # Write registered ground truth
         if self.maskGT is not None:
-            sitk.WriteImage(self.maskGT, os.path.join(savePath, 'regGT' + filenameImg))
+            maskGTpath = os.path.join(savePath, 'regGT' + filenameImg)
+            sitk.WriteImage(self.maskGT, maskGTpath)
+            print "   Ground truth registrado: ", maskGTpath
 
         # Write generated masks
         for i, mask in enumerate(self.MaskArray):
@@ -70,14 +79,19 @@ class CTandMasks:
             if not maskName:
                 maskName = 'mask'
 
-            savedMask = os.path.join(savePath, maskName + '_' + filenameImg)
+            maskPath = maskName + '_' + filenameImg
+            savedMask = os.path.join(savePath, maskPath)
             sitk.WriteImage(self.MaskArray[i][0], savedMask)
+            print "   Mascara generada (",maskName,"): ", maskPath
 
         return savedImg
 
 
     def register(self, registerGT = False, savePath=None, saveGT=False):
         # Register input CT scan to the atlas, getting the atlas (isotropic) dimensions in the input image
+
+        print "Registrando..."
+
         elastixImageFilter = sitk.ElastixImageFilter()
 
         elastixImageFilter.LogToConsoleOn()
@@ -96,15 +110,20 @@ class CTandMasks:
         # Save parameter map
         outTPM = elastixImageFilter.GetTransformParameterMap(0)
 
+        print "   Imagen de entrada registrada."
+
         if savePath is not None:
             folder = os.path.join(self.fName.replace(os.path.split(self.fName)[-1],''),savePath)
             if not os.path.exists(folder):
                 os.makedirs(folder)
             filename = os.path.join(folder, os.path.split(self.fName)[-1])
             sitk.WriteImage(registeredImage, filename)
+            print "   Imagen registrada guardada en ", filename
 
             outParamFile = os.path.join(filename + "_reg.txt")
             elastixImageFilter.WriteParameterFile(outTPM, outParamFile)
+
+            print "   Parametermap guardado."
 
             # Depende si es una mascara o una imagen normal registro diferente
             if registerGT:  # Si es una mascara
@@ -133,46 +152,73 @@ class CTandMasks:
                 registeredMask = sitk.Transformix(self.maskGT, currentTransform)
                 self.maskGT = registeredMask
 
+                print "   Mascara registrada exitosamente."
+
             if saveGT:
-                sitk.WriteImage(registeredMask, filename.replace("image","head_mask"))
+                maskSavePath = filename.replace("image","head_mask")
+                sitk.WriteImage(registeredMask, maskSavePath)
+                print "   Mascara guardada en ", maskSavePath
 
 
     def erodeInitialMask(self):
+        """
+        Erosionar la mascara inicial (atlas) para usarlo como semilla en la segmentacion
+        """
+
+        nErode = 8
+        kernelRadius = 5
+        foregroundVal = 1
+
+        print "Erosion de la mascara inicial"
+        print "  Cantidad de iteraciones: ",nErode,", radio del kernel: ", kernelRadius,", valor del frente: ", foregroundVal,"."
+
         filter = sitk.BinaryErodeImageFilter()
-        filter.SetKernelRadius(5)
-        filter.SetForegroundValue(1)
+        filter.SetKernelRadius(kernelRadius)
+        filter.SetForegroundValue(foregroundVal)
 
-
-
-        for i in xrange(8):
-            #self.MaskArray[0][0] = sitk.ErodeObjectMorphology(self.MaskArray[0][0])
+        for i in xrange(nErode):
             self.MaskArray[0][0] = filter.Execute(self.MaskArray[0][0])
-        #sitk.Show(movingImage)
+        print "   Imagen erosionada."
 
 
-    def headContours(self):
-        timeStep_, conduct, numIter = (0.04, 9.0, 5)
-        imgRecast = sitk.Cast(self.inputct, sitk.sitkFloat32)
-        curvDiff = sitk.CurvatureAnisotropicDiffusionImageFilter()
-        curvDiff.SetTimeStep(timeStep_)
-        curvDiff.SetConductanceParameter(conduct)
-        curvDiff.SetNumberOfIterations(numIter)
-        imgFilter = curvDiff.Execute(imgRecast)
+    def erodeBackgForeg(self, fgPath, bgPath):
+        """
+        Useful for GraphCuts (c++) method, it generates foreground and background masks.
+        :return:
+        """
+        nErodeF = 3  # Times I'll erode the foreground seed
+        nErodeB = 3  # Times I'll erodde the background (0 will make inverse of the foreground)
+        kernelRadius = 5
+        foregroundVal = 1
 
-        sigma_ = 2.0
-        imgGauss = sitk.GradientMagnitudeRecursiveGaussian(image1=imgFilter, sigma=sigma_)
-        K1, K2 = 18.0, 8.0
-        alpha_ = (K2 - K1) / 6
-        beta_ = (K1 + K2) / 2
+        print "Erosion de la mascara inicial (foreground)"
+        print "  Cantidad de iteraciones: ",nErodeF,", radio del kernel: ", kernelRadius,", valor del frente: ", foregroundVal,"."
 
-        sigFilt = sitk.SigmoidImageFilter()
-        sigFilt.SetAlpha(alpha_)
-        sigFilt.SetBeta(beta_)
-        sigFilt.SetOutputMaximum(1.0)
-        sigFilt.SetOutputMinimum(0.0)
-        imgSigmoid = sigFilt.Execute(imgGauss)
+        filter = sitk.BinaryErodeImageFilter()
+        filter.SetKernelRadius(kernelRadius)
+        filter.SetForegroundValue(foregroundVal)
 
-        return imgSigmoid
+        foregroundSeed = self.MaskArray[0][0]
+
+        for i in xrange(nErodeF):
+            foregroundSeed = filter.Execute(foregroundSeed)
+        print "   Foreground erosionado."
+
+        print "Erosion de la mascara inicial invertida (background)"
+        print "  Cantidad de iteraciones: ",nErodeB,", radio del kernel: ", kernelRadius,", valor del frente: ", foregroundVal,"."
+
+        backgroundSeed = foregroundSeed < 1
+
+        for i in xrange(nErodeB):
+            backgroundSeed = filter.Execute(backgroundSeed)
+        print "   Background erosionado."
+
+        sitk.WriteImage(foregroundSeed, fgPath)
+        sitk.WriteImage(backgroundSeed, bgPath)
+
+        print "   Mascaras para GraphCuts guardadas."
+        print "     Foreground: ", fgPath
+        print "     Background: ", bgPath
 
 
     def segLevelSets(self):
@@ -191,75 +237,78 @@ class CTandMasks:
 
         # La primer entrada, osea la semilla  debe estar invertida, es decir, el fondo debe ser blanco y la semilla negra
 
+        print "Segmentacion por Level Sets"
+
+        propSc, curvSc, advSc, maxRMS, nIter = 1, 1, 1, 0.02, 1200
+
         gac = sitk.GeodesicActiveContourLevelSetImageFilter()
-        gac.SetPropagationScaling(1)
-        gac.SetCurvatureScaling(1)
-        gac.SetAdvectionScaling(1)
-        gac.SetMaximumRMSError(0.02)
-        gac.SetNumberOfIterations(800)
+        gac.SetPropagationScaling(propSc)
+        gac.SetCurvatureScaling(curvSc)
+        gac.SetAdvectionScaling(advSc)
+        gac.SetMaximumRMSError(maxRMS)
+        gac.SetNumberOfIterations(nIter)
+
+        print "   Propagation Scaling: ",propSc,", curvature scaling: ",curvSc,", advection scaling: ",advSc,", max RMS error: ",maxRMS,", cantidad iteraciones: ",nIter,"."
 
         seed = self.MaskArray[0][0]
         seed = sitk.Cast(seed, sitk.sitkFloat32) * -1 + 0.5
 
-        # En vez de movingImagef uso gm
-        gm = self.headContours()
+        # Get the border map
+        gm = sitk.GradientMagnitude(self.inputct)
+        gm = gm < 100
 
-        # El primer parametro es el volumen que crece, el segundo
+        # El primer parametro es el volumen que crece, el segundo el mapa de bordes
         imgg = gac.Execute(seed, sitk.Cast(gm, sitk.sitkFloat32))
 
         imgg = imgg < 0
 
         self.MaskArray.append([imgg, 'lvlSet'])
+        print "   Segmentacion por Level Sets generada."
 
 
     def segConfConnected(self):
+        # Use as seeds the positions of the white pixels of the eroded mask
         coordsMask = np.where(sitk.GetArrayFromImage(self.MaskArray[0][0]))
         coordsMask = zip(coordsMask[0], coordsMask[1], coordsMask[2])
 
-        #seg_explicit_thresholds = sitk.ConnectedThreshold(self.inputct, seedList=[coordsMask[100]], lower=100,
-        #                                                  upper=170)
-        #self.MaskArray.append([seg_explicit_thresholds, 'ConfConnected'])
+        nIter, multip, initRadius, replaceVal = 5, 2.5, 10, 1
 
-
-        seed = [(144, 114,84), (102,159, 89), (98, 116, 131), (98, 116, 68)]
-
-        gm = self.headContours()
-
+        print "Segmentacion por crecimiento de regiones"
+        print "   Cantidad de iteraciones: ",nIter,", multiplicador: ",multip,", valor de reemplazo: ",replaceVal"."
+        # Segmentation using region growing
         seg_implicit_thresholds = sitk.ConfidenceConnected(self.inputct, seedList=coordsMask,
-                                                           numberOfIterations=5,
-                                                           multiplier=2.5,
-                                                           initialNeighborhoodRadius=10,
-                                                           replaceValue=1)
+                                                           numberOfIterations=nIter,
+                                                           multiplier=multip,
+                                                           initialNeighborhoodRadius=initRadius,
+                                                           replaceValue=replaceVal)
 
+        print "   Operaciones morfologicas (Apertura - Componente Conectada - Cierre)"
+        # Apply opening for separating big regions
         vectorRadius = (1, 1, 1)
         kernel = sitk.sitkBall
         seg_implicit_thresholds = sitk.BinaryMorphologicalOpening(seg_implicit_thresholds, vectorRadius, kernel)
 
+        # Keep the biggest Connected Component (the brain)
         seg_implicit_thresholds = f.retainLargestConnectedComponent(seg_implicit_thresholds)
 
+        # Closening for filling holes
         for i in range(10):
             seg_implicit_thresholds = sitk.BinaryMorphologicalClosing(seg_implicit_thresholds, 3)
 
-
-
         self.MaskArray.append([seg_implicit_thresholds, 'ConfConnected'])
-
-
-
-        #seg_implicit_threshold_vector = sitk.VectorConfidenceConnected(self.inputct,
-        #                                                               coordsMask[1],
-        #                                                               numberOfIterations=2,
-        #                                                               multiplier=4)
-        #self.MaskArray.append([seg_implicit_threshold_vector, 'ConfConnected'])
-
-
+        print "   Segmentacion por Crecimiento de regiones generada."
 
 
     def locateGroundTruth(self):
+        # From the filename of the input CT scan, get the mask (that should be located in the same folder)
         nameGT = self.fName.replace("_image.nii.gz", "_head_mask.nii.gz")
         self.maskGT = sitk.ReadImage(nameGT)
+        print "Mascara cargada."
+
 
     def compareWithGT(self):
+        # Get statistics of the segmentations, comparing with the Ground Truth
+        # todo seguir aca
         img1 = sitk.GetArrayFromImage(self.maskGT)
 
         i = 1  # Segmentacion que vamos a comparar
@@ -344,6 +393,9 @@ def registerImgs(inputImgPath=None, savePath=''):
 
 if __name__ == "__main__":
     # Registrar todas las imagenes de la carpeta 1111 y guardarlas dentro de reg
-    #registerImgs(inputImgPath='../1111', savePath='reg')
+    registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data/data_raw', savePath='reg')
 
-    mainRegistrado()
+    # Preprocesar las imagenes para que puedan ser levantadas por el algoritmo de Graph Cuts
+    # prepareGraphCuts()
+
+    # mainRegistrado()
