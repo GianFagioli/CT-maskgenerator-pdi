@@ -271,10 +271,10 @@ class CTandMasks:
         coordsMask = np.where(sitk.GetArrayFromImage(self.MaskArray[0][0]))
         coordsMask = zip(coordsMask[0], coordsMask[1], coordsMask[2])
 
-        nIter, multip, initRadius, replaceVal = 5, 2.5, 10, 1
+        nIter, multip, initRadius, replaceVal = 5, 2.5, 0, 1
 
         print "Segmentacion por crecimiento de regiones"
-        print "   Cantidad de iteraciones: ",nIter,", multiplicador: ",multip,", valor de reemplazo: ",replaceVal"."
+        print "   Cantidad de iteraciones: ",nIter,", multiplicador: ",multip,", valor de reemplazo: ",replaceVal,"."
         # Segmentation using region growing
         seg_implicit_thresholds = sitk.ConfidenceConnected(self.inputct, seedList=coordsMask,
                                                            numberOfIterations=nIter,
@@ -299,72 +299,173 @@ class CTandMasks:
         print "   Segmentacion por Crecimiento de regiones generada."
 
 
+    def segGraphCuts(self):
+        """
+        Locate the GraphCuts segmentation (it should be in the reg/graphcuts folder and have the same name as input filename).
+        but adding "GC_" at the beginning.
+        """
+        path, name = os.path.split(self.fName)
+        pathGC = os.path.join(path, "graphcuts","GC_" + name)
+        print "Cargando segmentacion por Graph Cuts"
+        print "   archivo: ", pathGC
+
+        segGC = sitk.ReadImage(pathGC)
+        segGC = segGC / 255
+
+        print "Segmentación cargada."
+
+        self.MaskArray.append([segGC, 'GraphCuts'])
+
+
+
     def locateGroundTruth(self):
         # From the filename of the input CT scan, get the mask (that should be located in the same folder)
         nameGT = self.fName.replace("_image.nii.gz", "_head_mask.nii.gz")
         self.maskGT = sitk.ReadImage(nameGT)
-        print "Mascara cargada."
+        print "Ground Truth cargado (",nameGT,")."
 
 
     def compareWithGT(self):
         # Get statistics of the segmentations, comparing with the Ground Truth
-        # todo seguir aca
+        # returns a list with the required metrics (the first value will be the name of the segmentation used)
         img1 = sitk.GetArrayFromImage(self.maskGT)
 
-        i = 1  # Segmentacion que vamos a comparar
-        img2 = sitk.GetArrayFromImage(self.MaskArray[i][0])
-        print "Segmentacion usada: ", self.MaskArray[i][1]
-        print "Dice coefficient: ", metric.binary.dc(img1, img2)
-        print "Jaccard coefficient: ", metric.binary.jc(img1, img2)
-        # todo Ver como pasarle el spacing!
-        # print "Hausdorff distance: ", metric.binary.hd(img1, img2)
-        # print "Average surface distance metric: ", metric.binary.asd(img1, img2)
-        # print "Average symmetric surface distance distance: ", metric.binary.assd(img1, img2)
-        print "Precision : ", metric.binary.precision(img1, img2)
-        print "Recall : ", metric.binary.recall(img1, img2)
-        print "Sensivity : ", metric.binary.sensitivity(img1, img2)
-        print "Specifity: ", metric.binary.specificity(img1, img2)
-        print "True positive rate: ", metric.binary.true_positive_rate(img1, img2)
-        print "Positive predictive value: ", metric.binary.positive_predictive_value(img1, img2)
-        print "Relative absolute volume difference: ", metric.binary.ravd(img1, img2)
+        for i in xrange(1,4):
+            img2 = sitk.GetArrayFromImage(self.MaskArray[i][0])
+            print "Segmentacion usada: ", self.MaskArray[i][1]
+            print "Calidad de la segmentación: "
+            dice = metric.binary.dc(img1, img2)
+            print "   Dice coefficient: ", dice
+            # print "   Jaccard coefficient: ", metric.binary.jc(img1, img2)
+            hausdorff = metric.binary.hd(img1, img2, self.maskGT.GetSpacing())
+            print "   Hausdorff distance: ", hausdorff
+            asd = metric.binary.asd(img1, img2, self.maskGT.GetSpacing())
+            print "   Average surface distance metric: ", asd
+            # print "   Average symmetric surface distance distance: ", metric.binary.assd(img1, img2, self.maskGT.GetSpacing())
+            # print "   Precision : ", metric.binary.precision(img1, img2)
+            # print "   Recall : ", metric.binary.recall(img1, img2)
+            # print "   Sensivity : ", metric.binary.sensitivity(img1, img2)
+            # print "   Specifity: ", metric.binary.specificity(img1, img2)
+            # print "   True positive rate: ", metric.binary.true_positive_rate(img1, img2)
+            # print "   Positive predictive value: ", metric.binary.positive_predictive_value(img1, img2)
+            # print "   Relative absolute volume difference: ", metric.binary.ravd(img1, img2)
+            if i == 1:
+                levelsets = [dice, hausdorff, asd]
+            elif i == 2:
+                reggrow = [dice, hausdorff, asd]
+            elif i == 3:
+                graphcuts = [dice, hausdorff, asd]
+        return levelsets, reggrow, graphcuts
 
 
 def mainRegistrado():
+    """
+    Calcular las segmentaciones por level sets y region growing de una carpeta determinada, comparando la calidad con el
+    Ground Truth que se encuentra en la misma carpeta de las imagenes de entrada.
+    :return:
+    """
     start_time = time.time()
 
-    # todo Esto deberia ir dentro de un loop que recorra todas las TAC, en vez de una sola (inputImgPath)
-    inputImgPath = '../1111/reg/1111_22216_image.nii.gz'  # Imagen que vamos a procesar
+    inputImgsPath = '../data/reg/normal'  # Imagenes que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
 
-    savePath = '../1111/seg'  # Carpeta donde se guarda la salida
+    savePath = '../data/reg/normal/output'  # Carpeta donde se guardan las segmentaciones
 
-    # Inicializar y cargar
-    imgs = CTandMasks()
-    imgs.open(inputImgPath, imageAtlasPath, paramPath, maskAtlasPath)
+    stats_levelsets = []
+    stats_reggrow = []
+    stats_graphcuts = []
 
-    # Erosionar mascara
-    imgs.erodeInitialMask()
+    for name in os.listdir(inputImgsPath):
+        if os.path.isfile(os.path.join(inputImgsPath, name)):
+            if "image" in name and not name.endswith(".txt"):  # Only process CT files, not masks and other stuff.
+                inputImgPath = os.path.join(inputImgsPath, name)
+                print "File name: ", inputImgPath, '\n'
 
-    # Obtener la segmentacion por level sets
-    imgs.segLevelSets()
+                # Inicializar y cargar
+                imgs = CTandMasks()
+                imgs.open(inputImgPath, imageAtlasPath, paramPath, maskAtlasPath)
 
-    # Obtener la segmentacion por crecimiento de regiones
-    imgs.segConfConnected()
+                # Erosionar mascara
+                imgs.erodeInitialMask()
 
-    # Cargar el Ground Truth a partir del nombre de la imagen de entrada
-    imgs.locateGroundTruth()
+                # Obtener la segmentacion por level sets
+                imgs.segLevelSets()
 
-    # Realizar estadisticas comparando las diferentes mascaras con el Ground Truth
-    imgs.compareWithGT()
+                # Obtener la segmentacion por crecimiento de regiones
+                imgs.segConfConnected()
 
-    # todo agregar boxplot, estudiar graficos para comparar
+                # Cargar las segmentaciones hechas con graphcuts (para luego compararlas)
+                imgs.segGraphCuts()
 
-    # Guardar los archivos en la carpeta establecida
-    imgs.saveFiles(savePath)
+                # Cargar el Ground Truth a partir del nombre de la imagen de entrada
+                imgs.locateGroundTruth()
 
-    print "Elapsed time was " + str(int(time.time() - start_time)) + " seconds."
+                # Realizar estadisticas comparando las diferentes mascaras con el Ground Truth
+                # Para cada uno de los metodos de segmentacion, obtener las metricas pedidas (3)
+                levelsets, reggrow, graphcuts = imgs.compareWithGT()
+                if not np.any(stats_levelsets): # If empty, add first row
+                    stats_levelsets.append(levelsets)
+                    stats_graphcuts.append(graphcuts)
+                    stats_reggrow.append(reggrow)
+                else:  # Append row
+                    stats_levelsets = np.vstack((stats_levelsets, levelsets))
+                    stats_reggrow = np.vstack((stats_reggrow, reggrow))
+                    stats_graphcuts = np.vstack((stats_graphcuts, graphcuts))
+
+                # Guardar los archivos en la carpeta establecida
+                imgs.saveFiles(savePath)
+
+    # Level sets
+    plt.figure()
+    plt.boxplot(stats_levelsets[:, 0])
+    plt.title('Levelset Dice Coefficient')
+    plt.savefig('ls_dc.png')
+
+    plt.figure()
+    plt.boxplot(stats_levelsets[:, 1])
+    plt.title('Levelset Hausdorff Distance')
+    plt.savefig('ls_hc.png')
+
+    plt.figure()
+    plt.boxplot(stats_levelsets[:, 2])
+    plt.title('Levelset Average Surface Distance Metric')
+    plt.savefig('ls_asd.png')
+
+    # Region Growing
+    plt.figure()
+    plt.boxplot(stats_reggrow[:, 0])
+    plt.title('Region Growing Dice Coefficient')
+    plt.savefig('rg_dc.png')
+
+    plt.figure()
+    plt.boxplot(stats_reggrow[:, 1])
+    plt.title('Region Growing Hausdorff Distance')
+    plt.savefig('rg_hd.png')
+
+    plt.figure()
+    plt.boxplot(stats_reggrow[:, 2])
+    plt.title('Region Growing Average Surface Distance Metric')
+    plt.savefig('rg_asd.png')
+
+    # Graph Cuts
+    plt.figure()
+    plt.boxplot(stats_graphcuts[:, 0])
+    plt.title('Graph Cuts Dice Coefficient')
+    plt.savefig('gc_dc.png')
+
+    plt.figure()
+    plt.boxplot(stats_graphcuts[:, 1])
+    plt.title('Graph Cuts Hausdorff Distance')
+    plt.savefig('gc_hd.png')
+
+    plt.figure()
+    plt.boxplot(stats_graphcuts[:, 2])
+    plt.title('Graph Cuts Average Surface Distance Metric')
+    plt.savefig('gc_asd.png')
+
+    print "El tiempo transcurrido fue de " + str(int(time.time() - start_time)) + " segundos."
 
 
 def registerImgs(inputImgPath=None, savePath=''):
@@ -393,9 +494,11 @@ def registerImgs(inputImgPath=None, savePath=''):
 
 if __name__ == "__main__":
     # Registrar todas las imagenes de la carpeta 1111 y guardarlas dentro de reg
-    registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data/data_raw', savePath='reg')
+    # registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data', savePath='reg')
 
-    # Preprocesar las imagenes para que puedan ser levantadas por el algoritmo de Graph Cuts
-    # prepareGraphCuts()
+    # Crear CSV para luego tomarlo con el algoritmo de graphcuts
+    # f.createCSV("/home/franco/facultad/pdi/tpf/data/reg/craniectomy")
+    # f.createCSV("/home/franco/facultad/pdi/tpf/data/reg/normal")
 
-    # mainRegistrado()
+    # Ejecutar level sets y region growing
+    mainRegistrado()

@@ -3,6 +3,7 @@ import SimpleITK as sitk
 from matplotlib import pyplot as plt
 import math
 import numpy as np
+import csv
 
 
 def retainLargestConnectedComponent(image):
@@ -263,3 +264,25 @@ def bbox3(imgPath):
     # sitk.Show(old)
     # sitk.Show(old[xmin:xmax, ymin:ymax, zmin:zmax])
     return img[ymin:ymax + 1, xmin:xmax + 1, zmin:zmax + 1]
+
+
+# Create csv file of the files in dataPath and subfolders
+def createCSV(dataPath):
+    print "Creating CSV file..."
+    filelist = []
+    for root, dirs, files in os.walk(dataPath):
+        for name in sorted(files, key=str.lower):
+            if name.endswith("_head_mask.nii.gz"):
+                name = os.path.join(root, name)
+                names = (name.replace("_head_mask.nii.gz",'_image.nii.gz'), name)
+                filelist.append(names)
+            else:
+                continue
+
+    nameCSV = 'files.csv'
+    print "   writing file", nameCSV
+    with open(os.path.join(dataPath, nameCSV), 'w') as fp:
+        writer = csv.writer(fp, delimiter=',')
+        # writer.writerow(["your", "header", "foo"])  # write header
+        writer.writerows(filelist)
+    print "Done."
