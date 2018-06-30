@@ -366,7 +366,7 @@ def mainRegistrado():
     """
     start_time = time.time()
 
-    inputImgsPath = '../data/reg/normal'  # Imagenes que vamos a procesar
+    inputImgsPath = '../data/reg/craniectomy'  # Imagenes que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
@@ -421,48 +421,57 @@ def mainRegistrado():
     plt.figure()
     plt.boxplot(stats_levelsets[:, 0])
     plt.title('Levelset Dice Coefficient')
+    print 'Levelset Dice Coefficient mean and std: ', np.mean(stats_levelsets[:, 0]), np.std(stats_levelsets[:, 0])
     plt.savefig('ls_dc.png')
 
     plt.figure()
     plt.boxplot(stats_levelsets[:, 1])
     plt.title('Levelset Hausdorff Distance')
+    print 'Levelset Hausdorff Distance mean and std: ', np.mean(stats_levelsets[:, 1]), np.std(stats_levelsets[:, 1])
     plt.savefig('ls_hc.png')
 
     plt.figure()
     plt.boxplot(stats_levelsets[:, 2])
     plt.title('Levelset Average Surface Distance Metric')
+    print 'Levelset Average Surface Distance Metric mean and std: ', np.mean(stats_levelsets[:, 2]), np.std(stats_levelsets[:, 2])
     plt.savefig('ls_asd.png')
 
     # Region Growing
     plt.figure()
     plt.boxplot(stats_reggrow[:, 0])
     plt.title('Region Growing Dice Coefficient')
+    print 'Region Growing Dice Coefficient mean and std: ', np.mean(stats_reggrow[:, 0]), np.std(stats_reggrow[:, 0])
     plt.savefig('rg_dc.png')
 
     plt.figure()
     plt.boxplot(stats_reggrow[:, 1])
     plt.title('Region Growing Hausdorff Distance')
+    print 'Region Growing Hausdorff Distance mean and std: ', np.mean(stats_reggrow[:, 1]), np.std(stats_reggrow[:, 1])
     plt.savefig('rg_hd.png')
 
     plt.figure()
     plt.boxplot(stats_reggrow[:, 2])
     plt.title('Region Growing Average Surface Distance Metric')
+    print 'Region Growing Average Surface Distance Metric mean and std: ', np.mean(stats_reggrow[:, 2]), np.std(stats_reggrow[:, 2])
     plt.savefig('rg_asd.png')
 
     # Graph Cuts
     plt.figure()
     plt.boxplot(stats_graphcuts[:, 0])
     plt.title('Graph Cuts Dice Coefficient')
+    print 'Graph Cuts Dice Coefficient mean and std: ', np.mean(stats_graphcuts[:, 0]), np.std(stats_graphcuts[:, 0])
     plt.savefig('gc_dc.png')
 
     plt.figure()
     plt.boxplot(stats_graphcuts[:, 1])
     plt.title('Graph Cuts Hausdorff Distance')
+    print 'Graph Cuts Hausdorff Distance mean and std: ', np.mean(stats_graphcuts[:, 1]), np.std(stats_graphcuts[:, 1])
     plt.savefig('gc_hd.png')
 
     plt.figure()
     plt.boxplot(stats_graphcuts[:, 2])
     plt.title('Graph Cuts Average Surface Distance Metric')
+    print 'Graph Cuts Average Surface Distance Metric mean and std: ', np.mean(stats_graphcuts[:, 2]), np.std(stats_graphcuts[:, 2])
     plt.savefig('gc_asd.png')
 
     print "El tiempo transcurrido fue de " + str(int(time.time() - start_time)) + " segundos."
