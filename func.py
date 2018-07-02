@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os, sys
 import SimpleITK as sitk
 from matplotlib import pyplot as plt
@@ -286,3 +288,57 @@ def createCSV(dataPath):
         # writer.writerow(["your", "header", "foo"])  # write header
         writer.writerows(filelist)
     print "Done."
+
+
+def boxplots(stats_levelsets, stats_reggrow, stats_graphcuts):
+    # Dices de los métodos
+    dice, ax = plt.subplots()
+    dice.canvas.draw()
+    plt.boxplot([stats_levelsets[:, 0], stats_reggrow[:, 0], stats_graphcuts[:, 0]])
+    labels = [item.get_text() for item in ax.get_xticklabels()]
+    labels[0] = 'Level Sets'
+    labels[1] = 'Region Growing'
+    labels[2] = 'Graph Cuts'
+    ax.set_xticklabels(labels)
+    plt.title('Dice Coefficient')
+    plt.savefig('dice.png')
+
+    # Hausdorff de los métodos
+    hausdorff, ax = plt.subplots()
+    hausdorff.canvas.draw()
+    plt.boxplot([stats_levelsets[:, 1], stats_reggrow[:, 1], stats_graphcuts[:, 1]])
+    labels = [item.get_text() for item in ax.get_xticklabels()]
+    labels[0] = 'Level Sets'
+    labels[1] = 'Region Growing'
+    labels[2] = 'Graph Cuts'
+    ax.set_xticklabels(labels)
+    plt.title('Hausdorff Distance')
+    plt.savefig('hausdorff.png')
+
+    # Average Surface Distance de los métodos
+    hausdorff, ax = plt.subplots()
+    hausdorff.canvas.draw()
+    plt.boxplot([stats_levelsets[:, 2], stats_reggrow[:, 2], stats_graphcuts[:, 2]])
+    labels = [item.get_text() for item in ax.get_xticklabels()]
+    labels[0] = 'Level Sets'
+    labels[1] = 'Region Growing'
+    labels[2] = 'Graph Cuts'
+    ax.set_xticklabels(labels)
+    plt.title('Average Surface Distance')
+    plt.savefig('asd.png')
+
+    # Means and std
+    print 'Dice mean and std'
+    print '   Levelset: ', np.mean(stats_levelsets[:, 0]), np.std(stats_levelsets[:, 0])
+    print '   Region Growing: ', np.mean(stats_reggrow[:, 0]), np.std(stats_reggrow[:, 0])
+    print '   Graph Cuts: ', np.mean(stats_graphcuts[:, 0]), np.std(stats_graphcuts[:, 0])
+
+    print 'Hausdorff Distance mean and std'
+    print '   Levelset: ', np.mean(stats_levelsets[:, 1]), np.std(stats_levelsets[:, 1])
+    print '   Region Growing: ', np.mean(stats_reggrow[:, 1]), np.std(stats_reggrow[:, 1])
+    print '   Graph Cuts: ', np.mean(stats_graphcuts[:, 1]), np.std(stats_graphcuts[:, 1])
+
+    print 'Average Surface Distance Metric mean and std'
+    print '   Levelset: ', np.mean(stats_levelsets[:, 2]), np.std(stats_levelsets[:, 2])
+    print '   Region Growing: ', np.mean(stats_reggrow[:, 2]), np.std(stats_reggrow[:, 2])
+    print '   Graph Cuts: ', np.mean(stats_graphcuts[:, 2]), np.std(stats_graphcuts[:, 2])
