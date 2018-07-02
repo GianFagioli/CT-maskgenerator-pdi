@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import os, sys
+import os
 import SimpleITK as sitk
 from matplotlib import pyplot as plt
 import math

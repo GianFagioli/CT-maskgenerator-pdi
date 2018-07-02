@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 import time
-from matplotlib import pyplot as plt
 import func as f
 import SimpleITK as sitk
-import math
 import numpy as np
-import csv
-import nibabel as nib
 from medpy import metric
 
 
@@ -85,6 +81,23 @@ class CTandMasks:
             print "   Mascara generada (",maskName,"): ", maskPath
 
         return savedImg
+
+
+    def normalize(self):
+        data = sitk.GetArrayFromImage(self.inputct)
+
+        # data has integer values (data.dtype), so it needs to be casted to float
+        dataAux = data.astype(float)
+
+        dataAux = (dataAux - dataAux.min()) / (dataAux.max() - dataAux.min())
+
+        # Save edited data
+        outImg = sitk.GetImageFromArray(dataAux)
+        outImg.SetSpacing(self.inputct.GetSpacing())
+        outImg.SetOrigin(self.inputct.GetOrigin())
+        outImg.SetDirection(self.inputct.GetDirection())
+
+        self.inputct = outImg
 
 
     def register(self, registerGT = False, savePath=None, saveGT=False):
@@ -255,7 +268,7 @@ class CTandMasks:
 
         # Get the border map
         gm = sitk.GradientMagnitude(self.inputct)
-        gm = gm < 100
+        gm = gm < 0.01
 
         # El primer parametro es el volumen que crece, el segundo el mapa de bordes
         imgg = gac.Execute(seed, sitk.Cast(gm, sitk.sitkFloat32))
@@ -271,7 +284,7 @@ class CTandMasks:
         coordsMask = np.where(sitk.GetArrayFromImage(self.MaskArray[0][0]))
         coordsMask = zip(coordsMask[0], coordsMask[1], coordsMask[2])
 
-        nIter, multip, initRadius, replaceVal = 5, 2.5, 0, 1
+        nIter, multip, initRadius, replaceVal = 0, 2, 0, 1
 
         print "Segmentacion por crecimiento de regiones"
         print "   Cantidad de iteraciones: ",nIter,", multiplicador: ",multip,", valor de reemplazo: ",replaceVal,"."
@@ -366,7 +379,7 @@ def mainRegistrado():
     """
     start_time = time.time()
 
-    inputImgsPath = '../data/reg/normal'  # Imagenes que vamos a procesar
+    inputImgsPath = '../data/reg/craniectomy'  # Imagenes que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
@@ -422,7 +435,7 @@ def mainRegistrado():
     print "El tiempo transcurrido fue de " + str(int(time.time() - start_time)) + " segundos."
 
 
-def registerImgs(inputImgPath=None, savePath=''):
+def registerImgs(inputImgPath=None, savePath='', norm=True):
     if inputImgPath is None:
         print "Input folder not specified!"
         return
@@ -442,17 +455,19 @@ def registerImgs(inputImgPath=None, savePath=''):
                 imgs = CTandMasks()
                 imgs.open(filepath, imageAtlasPath, paramPath, maskAtlasPath)
 
+                if norm is True:
+                    imgs.normalize()
+
                 imgs.locateGroundTruth()
                 imgs.register(registerGT=True, savePath=savePath, saveGT=True)
 
 
 if __name__ == "__main__":
-    # Registrar todas las imagenes de la carpeta 1111 y guardarlas dentro de reg
-    # registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data', savePath='reg')
+    # Registrar todas las imagenes de la carpeta y guardarlas dentro de reg
+    # registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data', savePath='reg', norm=True)
 
     # Crear CSV para luego tomarlo con el algoritmo de graphcuts
     # f.createCSV("/home/franco/facultad/pdi/tpf/data/reg/craniectomy")
-    # f.createCSV("/home/franco/facultad/pdi/tpf/data/reg/normal")
 
     # Ejecutar level sets y region growing
     mainRegistrado()
