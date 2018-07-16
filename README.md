@@ -1,3 +1,4 @@
+*Nota: Si no necesitas GraphCuts (C++), te recomiendo utilizar el branch sin GC: https://github.com/GianFagioli/CT-maskgenerator-pdi/tree/without_graphcuts*
 
 # CT-maskgenerator-pdi - Segmentation Tool for CT images.
 
