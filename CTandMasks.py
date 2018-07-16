@@ -343,32 +343,30 @@ class CTandMasks:
         # returns a list with the required metrics (the first value will be the name of the segmentation used)
         img1 = sitk.GetArrayFromImage(self.maskGT)
 
-        for i in xrange(1,4):
+        for i in xrange(1,3):
             img2 = sitk.GetArrayFromImage(self.MaskArray[i][0])
             print "Segmentacion usada: ", self.MaskArray[i][1]
             print "Calidad de la segmentación: "
             dice = metric.binary.dc(img1, img2)
             print "   Dice coefficient: ", dice
-            # print "   Jaccard coefficient: ", metric.binary.jc(img1, img2)
+            print "   Jaccard coefficient: ", metric.binary.jc(img1, img2)
             hausdorff = metric.binary.hd(img1, img2, self.maskGT.GetSpacing())
             print "   Hausdorff distance: ", hausdorff
             asd = metric.binary.asd(img1, img2, self.maskGT.GetSpacing())
             print "   Average surface distance metric: ", asd
-            # print "   Average symmetric surface distance distance: ", metric.binary.assd(img1, img2, self.maskGT.GetSpacing())
-            # print "   Precision : ", metric.binary.precision(img1, img2)
-            # print "   Recall : ", metric.binary.recall(img1, img2)
-            # print "   Sensivity : ", metric.binary.sensitivity(img1, img2)
-            # print "   Specifity: ", metric.binary.specificity(img1, img2)
-            # print "   True positive rate: ", metric.binary.true_positive_rate(img1, img2)
-            # print "   Positive predictive value: ", metric.binary.positive_predictive_value(img1, img2)
-            # print "   Relative absolute volume difference: ", metric.binary.ravd(img1, img2)
+            print "   Average symmetric surface distance distance: ", metric.binary.assd(img1, img2, self.maskGT.GetSpacing())
+            print "   Precision : ", metric.binary.precision(img1, img2)
+            print "   Recall : ", metric.binary.recall(img1, img2)
+            print "   Sensivity : ", metric.binary.sensitivity(img1, img2)
+            print "   Specifity: ", metric.binary.specificity(img1, img2)
+            print "   True positive rate: ", metric.binary.true_positive_rate(img1, img2)
+            print "   Positive predictive value: ", metric.binary.positive_predictive_value(img1, img2)
+            print "   Relative absolute volume difference: ", metric.binary.ravd(img1, img2)
             if i == 1:
                 levelsets = [dice, hausdorff, asd]
             elif i == 2:
                 reggrow = [dice, hausdorff, asd]
-            elif i == 3:
-                graphcuts = [dice, hausdorff, asd]
-        return levelsets, reggrow, graphcuts
+        return levelsets, reggrow
 
 
 def mainRegistrado():
@@ -379,16 +377,15 @@ def mainRegistrado():
     """
     start_time = time.time()
 
-    inputImgsPath = '../data/reg/craniectomy'  # Imagenes que vamos a procesar
+    inputImgsPath = '../data3/reg'  # Imagenes que vamos a procesar
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
 
-    savePath = '../data/reg/normal/output'  # Carpeta donde se guardan las segmentaciones
+    savePath = '../data3/reg/output'  # Carpeta donde se guardan las segmentaciones
 
     stats_levelsets = []
     stats_reggrow = []
-    stats_graphcuts = []
 
     for name in os.listdir(inputImgsPath):
         if os.path.isfile(os.path.join(inputImgsPath, name)):
@@ -409,28 +406,23 @@ def mainRegistrado():
                 # Obtener la segmentacion por crecimiento de regiones
                 imgs.segConfConnected()
 
-                # Cargar las segmentaciones hechas con graphcuts (para luego compararlas)
-                imgs.segGraphCuts()
-
                 # Cargar el Ground Truth a partir del nombre de la imagen de entrada
                 imgs.locateGroundTruth()
 
                 # Realizar estadisticas comparando las diferentes mascaras con el Ground Truth
                 # Para cada uno de los metodos de segmentacion, obtener las metricas pedidas (3)
-                levelsets, reggrow, graphcuts = imgs.compareWithGT()
+                levelsets, reggrow = imgs.compareWithGT()
                 if not np.any(stats_levelsets): # If empty, add first row
                     stats_levelsets.append(levelsets)
-                    stats_graphcuts.append(graphcuts)
                     stats_reggrow.append(reggrow)
                 else:  # Append row
                     stats_levelsets = np.vstack((stats_levelsets, levelsets))
                     stats_reggrow = np.vstack((stats_reggrow, reggrow))
-                    stats_graphcuts = np.vstack((stats_graphcuts, graphcuts))
 
                 # Guardar los archivos en la carpeta establecida
                 imgs.saveFiles(savePath)
 
-    f.boxplots(stats_levelsets, stats_reggrow, stats_graphcuts)
+    f.boxplots(stats_levelsets, stats_reggrow)
 
     print "El tiempo transcurrido fue de " + str(int(time.time() - start_time)) + " segundos."
 
@@ -444,7 +436,6 @@ def registerImgs(inputImgPath=None, savePath='', norm=True):
     imageAtlasPath = '../Atlas3/atlas3_nonrigid_masked_1mm.nii.gz'  # Atlas de TAC (promedio de muchas tomografias)
     paramPath = 'Par0000affine.txt'  # Mapa de parametros a usar en la registracion
     maskAtlasPath = '../Atlas3/atlas3_nonrigid_brain_mask_1mm.nii.gz'  # Mascara que vamos a usar para inicializar
-
 
     for root, dirs, files in os.walk(inputImgPath):
         for name in files:
@@ -464,10 +455,7 @@ def registerImgs(inputImgPath=None, savePath='', norm=True):
 
 if __name__ == "__main__":
     # Registrar todas las imagenes de la carpeta y guardarlas dentro de reg
-    # registerImgs(inputImgPath='/home/franco/facultad/pdi/tpf/data', savePath='reg', norm=True)
-
-    # Crear CSV para luego tomarlo con el algoritmo de graphcuts
-    # f.createCSV("/home/franco/facultad/pdi/tpf/data/reg/craniectomy")
+    registerImgs(inputImgPath='/home/fmatzkin/Code/data3', savePath='reg', norm=True)
 
     # Ejecutar level sets y region growing
     mainRegistrado()
